@@ -1,3 +1,13 @@
+# credentials — never commit these
+bucket_access/config.py
+*.env
+
+# data files — keep data in the bucket, not the repo
+*.h5
+*.nii
+*.nii.gz
+*.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
