@@ -113,19 +113,28 @@ Anthropic is providing **$20 in API credits** per participant.
    *(link goes live at 16:00 — use your Organization ID from console.anthropic.com, not your claude.ai user ID)*
 
 2. Install Claude Code:
-```bash
-curl -fsSL https://claude.ai/install.sh | bash
-```
+
+   **Mac / Linux:**
+   <pre>curl -fsSL https://claude.ai/install.sh | bash</pre>
+
+    **Windows:**
+   Download and run the installer from [claude.ai/download](https://claude.ai/download)
 
 3. Set your API key:
-```bash
-echo "export ANTHROPIC_API_KEY=sk-ant-..." >> ~/.bashrc
-source ~/.bashrc
-```
+
+   **Mac / Linux:**
+   <pre>echo "export ANTHROPIC_API_KEY=sk-ant-..." >> ~/.bashrc
+   source ~/.bashrc</pre>
+
+   **Windows — PowerShell:**
+   <pre>[System.Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-...", "User")</pre>
+
+   **Windows — UI:**
+   Search "environment variables" in the Start menu → Edit environment variables for your account → New → add `ANTHROPIC_API_KEY` and your key value
 
 4. Run:
 ```bash
-claude
+   claude
 ```
 
 ### Option B — Already have Claude Code running with a subscription
@@ -134,11 +143,18 @@ You can use the hackathon API credits instead of your subscription.
 
 1. Claim your credits at **[appliedfutures.io/hackathons/explainable-brains](https://appliedfutures.io/hackathons/explainable-brains)**
    *(use your Organization ID from console.anthropic.com)*
+
 2. Set the API key — this overrides your subscription automatically, no reinstall needed:
-```bash
-echo "export ANTHROPIC_API_KEY=sk-ant-..." >> ~/.bashrc
-source ~/.bashrc
-```
+
+   **Mac / Linux:**
+   <pre>echo "export ANTHROPIC_API_KEY=sk-ant-..." >> ~/.bashrc
+   source ~/.bashrc</pre>
+
+   **Windows — PowerShell:**
+   <pre>[System.Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-...", "User")</pre>
+
+   **Windows — UI:**
+   Search "environment variables" in the Start menu → Edit environment variables for your account → New → add `ANTHROPIC_API_KEY` and your key value
 
 ---
 
