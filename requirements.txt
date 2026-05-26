@@ -1,0 +1,9 @@
+streamlit>=1.35
+plotly>=5.22
+umap-learn>=0.5
+hdbscan>=0.8
+numpy
+pandas
+scikit-learn
+Pillow
+h5py
