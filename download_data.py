@@ -128,13 +128,22 @@ def main(skip_patches: bool = False, max_brains: int | None = None) -> None:
         print(f"\nDownloading {len(emb_keys)} embedding files …")
 
         all_emb = []
+        downloaded_scans = []
         for key in emb_keys:
             emb, attrs = read_h5_embeddings(key)
             all_emb.append(emb)
+            scan = str(attrs.get("scan_name", key.split("/")[-1].replace("_embeddings.h5", "")))
+            downloaded_scans.append(scan)
 
         emb_all = np.vstack(all_emb).astype(np.float32)
         np.save(emb_path, emb_all)
         print(f"✓ embeddings.npy saved {emb_all.shape}")
+
+        # Filter metadata to only the brains we actually downloaded
+        if max_brains:
+            meta_df = meta_df[meta_df["brain_id"].isin(downloaded_scans)].reset_index(drop=True)
+            meta_df.to_csv(meta_csv, index=False)
+            print(f"✓ metadata.csv trimmed to {len(meta_df):,} rows ({len(downloaded_scans)} brains)")
 
     # ── Step 3: patch images ─────────────────────────────────────────────────
     if skip_patches:
