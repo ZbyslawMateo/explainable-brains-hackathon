@@ -15,7 +15,7 @@ from PIL import Image, ImageOps
 
 from pipeline.load import load_embeddings, load_metadata, load_patch_image
 from pipeline.reduce import compute_projection, METHODS as PROJ_METHODS, METHOD_DESCRIPTIONS
-from pipeline.cluster import compute_clusters, METHODS as CLUSTER_METHODS, cluster_summary
+from pipeline.cluster import compute_clusters, find_best_k, METHODS as CLUSTER_METHODS, cluster_summary
 from pipeline.select import (
     select_subset, build_selection_info, coverage_score,
     find_similar_patches, STRATEGIES, SelectionInfo,
@@ -154,20 +154,22 @@ def _get_projection(method, n_neighbors, min_dist, perplexity, _emb_id):
     )
 
 @st.cache_data(show_spinner="Clustering…")
-def _get_clusters(method, min_cluster_size, min_samples, n_clusters, _emb_id):
-    return compute_clusters(
+def _get_clusters(method, min_cluster_size, min_samples, n_clusters, gmm_cov, _emb_id):
+    result = compute_clusters(
         _load_embeddings(), method=method,
         min_cluster_size=min_cluster_size,
         min_samples=min_samples,
         n_clusters=n_clusters,
+        covariance_type=gmm_cov,
     )
+    return result.labels, result.silhouette, result.proba
 
 @st.cache_data(show_spinner=False)
 def _get_all_selections(target_n, cluster_method, cluster_params_hash, _emb_id):
     """Pre-compute all three selection strategies for instant switching."""
     emb  = _load_embeddings()
     meta = _load_metadata()
-    labels = _get_clusters(*cluster_params_hash, _emb_id)
+    labels, _, _ = _get_clusters(*cluster_params_hash, _emb_id)
     return {
         s: select_subset(emb, meta, labels, s, target_n)
         for s in STRATEGIES
@@ -252,11 +254,27 @@ with st.sidebar:
                 help="Controls noise sensitivity. Higher = more points labelled noise")
             n_clusters = 25
         else:
-            n_clusters = st.slider("Number of clusters (k)", 5, 80, 25)
+            auto_k = st.toggle("Auto-select k (elbow method)", value=False,
+                help="Finds the bend in the silhouette curve — avoids trivial k=2")
+            if auto_k and cluster_method in ("K-Means", "GMM", "Agglomerative (Ward)"):
+                with st.spinner("Sweeping k…"):
+                    rec_k, _ = find_best_k(_load_embeddings(), method=cluster_method)
+                st.caption(f"Recommended k = **{rec_k}**")
+                n_clusters = rec_k
+            else:
+                n_clusters = st.slider("Number of clusters (k)", 2, 80, 8,
+                    help="Higher k = finer-grained clusters. Elbow typically at k=4–6 for this dataset.")
             min_cluster_size, min_samples = 20, 5
 
+        if cluster_method == "GMM":
+            gmm_cov = st.selectbox("Covariance type",
+                ["full", "tied", "diag", "spherical"], index=0,
+                help="'full' is most flexible; 'diag' is faster for high-dim embeddings")
+        else:
+            gmm_cov = "full"
+
     # Cache params as tuple for stable key
-    cluster_params = (cluster_method, min_cluster_size, min_samples, n_clusters)
+    cluster_params = (cluster_method, min_cluster_size, min_samples, n_clusters, gmm_cov)
 
     st.markdown("<hr class='thin-rule'>", unsafe_allow_html=True)
 
@@ -313,7 +331,7 @@ with st.sidebar:
 # ═════════════════════════════════════════════════════════════════════════════
 
 proj_coords  = _get_projection(proj_method, n_neighbors, min_dist, perplexity, emb_id)
-cluster_labels = _get_clusters(*cluster_params, emb_id)
+cluster_labels, cluster_silhouette, cluster_proba = _get_clusters(*cluster_params, emb_id)
 
 # Apply keyword filter
 KEYWORD_RULES = {
@@ -758,6 +776,7 @@ st.markdown(f"""
   </span>
   <span class="stat-item"><strong>{n_brains_sel}</strong> / {n_brains} brains</span>
   <span class="stat-item"><strong>{n_clusters_sel}</strong> / {n_clusters_total} clusters covered</span>
+  {f'<span class="stat-item">Silhouette <strong>{cluster_silhouette:.3f}</strong></span>' if cluster_silhouette is not None else ''}
 </div>
 """, unsafe_allow_html=True)
 
