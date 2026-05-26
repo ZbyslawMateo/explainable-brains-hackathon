@@ -1,210 +1,88 @@
-# Explainable Brains Hackathon
+# 🧠 Brain Patch Selector
 
-**Copenhagen · Tuesday May 26th, 2026 · 16:00–20:00**  
-*From signals to understanding — a 4-hour sprint to make complex brain imaging data accessible, interpretable, and actionable.*
+Active-learning data curation for mouse brain scan images. Automatically selects the most **informative and diverse** patches for labelling — so you label less but train smarter.
 
----
+## Quick start
 
-The brain is under pressure. Neurological and mental health conditions are among the most widespread and least solved problems in medicine. As populations age and daily life grows more cognitively demanding, the burden on patients, families, healthcare systems, and economies continues to grow.
-
-Vibraint ApS ([vibraint.dk](https://vibraint.dk)) builds tools to accelerate treatment discovery for brain diseases. Their platform processes complex 3D microscopy scans of rodent brains into interactive, interpretable brain maps making it possible to track how drugs distribute across brain regions, map neural activity patterns in response to treatment, and localise specific receptors and cell types at the scale and resolution that drug development demands.
-
-Drug development for brain diseases has one of the highest failure rates in medicine. The bottleneck is not the amount of data. It is the complexity that makes exploration and interpretation far from straightforward.
-
-> **Overarching question: How can we extract meaningful information from complex brain imaging data?**
-
----
-
-## Challenge A — Smart image data selection for generalizable AI models
-
-Training AI models for brain imaging is not bottlenecked by compute — it is bottlenecked
-by data selection. A smaller, well-curated dataset often outperforms a large, noisy one.
-Reliable ground truth labels are generated through time-intensive semi-manual processes,
-so choosing *which* patches to label matters enormously.
-
-The challenge is to automatically identify the most informative signal patterns that
-represent the diversity of the dataset, enabling models to generalize well while
-minimizing the need for manual labeling.
-
-*Standard laptop should be sufficient. GPU useful only if you want to run custom models: see [LightningAI](#lightningai-studio) below.*
-
-**→ [Challenge A — solution, data, and quick start](CHALLENGE_A.md)**
-
-
-## Challenge B — Guided brain data exploration for biological insight
-
-Brain scans go through signal extraction and quantification in Vibraint's analysis
-pipeline. The final output is rich but complex: spreadsheets summarizing quantified
-signal per brain region and sample, statistical comparisons between groups, and spatial
-brain maps. This data is difficult to visualize intuitively, hard to navigate, and
-challenging to interpret without specialist tools.
-
-*Works on any laptop. No GPU needed.*
-
-**→ [Challenge B — solution, data, and quick start](CHALLENGE_B.md)**
-
----
-
-## Setup
-
-### 1. Fork and clone the repo
-
-First, click **Fork** at the top right of this page to copy the repo to your GitHub account.  
-Then, clone your fork:
 ```bash
-git clone https://github.com/explainable-brains/explainable-brains-hackathon.git
-cd explainable-brains-hackathon
-```
-
-### 2. Create the environment
-
-With conda:
-```bash
-conda env create -f environment.yml
-conda activate explainable-brains
-```
-
-With pip:
-```bash
+# 1. Install dependencies
 pip install -r requirements.txt
+
+# 2a. Use your real data (see Data format below)
+#    OR generate synthetic test data first:
+python generate_sample_data.py --n 500
+
+# 3. Run the app
+streamlit run app.py
 ```
 
-### 3. Bucket access
+## Data format
 
-Data lives in a cloud bucket. Credentials are in `bucket_access/config.py` — already
-in the repo for the duration of the hackathon.
+Place files in the `data/` directory:
 
-```python
-from bucket_access.bucket_utils import list_files, download_file, read_h5_patches
+| File | Description |
+|---|---|
+| `data/embeddings.npy` | Float32 array of shape `(N, 512)` — one embedding per patch |
+| `data/metadata.csv` | CSV with columns: `patch_id`, `brain_id`, `condition` (placebo/semaglutide), `brightness`, `sharpness`, `contrast`, `snr` |
+| `data/patches/` | 256×256 images named `<patch_id>.jpg` or `<patch_id>.png` |
+| `data/patches.h5` _(alternative)_ | HDF5 with datasets `"images"` (N,256,256,3) and `"patch_ids"` (N,) |
 
-# see what's in the bucket
-list_files('challengeA/')
-list_files('challengeB/')
+## Features
+
+### Selection strategies
+
+| Strategy | How it works | Best for |
+|---|---|---|
+| **Cluster-medoid** | One representative from each visual cluster | Fast, interpretable |
+| **FarthestPoint** | Greedy max-diversity in embedding space | Maximum geometric coverage |
+| **Quality-weighted** | Diversity × quality score (sharpness × SNR) | Diverse _and_ usable images |
+
+### Interactive explorer tabs
+
+- **UMAP Explorer** — 2D scatter plot of all patches. Click any point to view the image + metadata.
+- **Image Grid** — Thumbnail view of all selected patches.
+- **Compare vs Random** — Coverage curve showing smart selection vs random baseline at each subset size.
+
+### Text steering (bonus)
+
+Type keywords in the sidebar to bias selection toward specific patch types:
+
+```
+bright        →  top-25% brightness
+sharp         →  top-25% sharpness
+signal        →  top-25% SNR
+clean         →  top-25% SNR
+noisy         →  bottom-25% SNR
+dark          →  bottom-25% brightness
 ```
 
-See [bucket_access/bucket_utils.py](bucket_access/bucket_utils.py) for all available functions.
+Multiple keywords can be combined: `bright, sharp, signal`
 
-### 4. Set up Claude Code. See instructions below.
+## Architecture
 
-### 5. Work on the challenge. Submit your work
+```
+pipeline/
+  load.py      — embeddings, metadata, lazy image access
+  reduce.py    — UMAP 2D projection (cached to cache/)
+  cluster.py   — HDBSCAN clustering (cached to cache/)
+  select.py    — three selection strategies + coverage metric
+app.py         — Streamlit UI
+```
 
-Push your code to your fork before demos start at 18:55:
+Results are cached to `cache/` — UMAP takes ~2 min on first run, instant thereafter.
+
+## Key metric: Cluster coverage
+
+> _What fraction of all discovered visual patterns is represented in your selection?_
+
+A smart selection of 200 patches from 7,500 can cover **100% of clusters** — where a random draw of the same size might cover only 60%. This is the core value proposition shown in the Compare tab.
+
+## Deploy
 
 ```bash
-git add .
-git commit -m "hackathon submission, team X"
-git push
-```
-
-Share your fork URL when you demo so the judges and other teams can see what you built.
-
----
-
-## Claude Code setup
-
-Claude Code is an AI coding assistant that runs in your terminal and reads, writes,
-and executes code across your whole project.
-
-### Option A — Anthropic API credits (no subscription needed)
-
-Anthropic is providing **$20 in API credits** per participant.
-
-1. Claim your credits at **[appliedfutures.io/hackathons/explainable-brains](https://appliedfutures.io/hackathons/explainable-brains)**
-   *(link goes live at 16:00 — use your Organization ID from console.anthropic.com, not your claude.ai user ID)*
-
-2. Install Claude Code:
-
-   **Mac / Linux:**
-   <pre>curl -fsSL https://claude.ai/install.sh | bash</pre>
-
-    **Windows (PowerShell):**
-```bash
-   winget install Anthropic.ClaudeCode
-```
-   Requires [Git for Windows](https://git-scm.com/downloads/win) — install that first if you don't have it.
-
-3. Set your API key:
-
-   **Linux:**
-   <pre>echo "export ANTHROPIC_API_KEY=sk-ant-..." >> ~/.bashrc
-   source ~/.bashrc</pre>
-
-   **Mac:**
-   <pre>echo "export ANTHROPIC_API_KEY=sk-ant-..." >> ~/.zshrc
-   source ~/.zshrc</pre>
-   
-   **Windows (Git Bash):**
-   <pre>export ANTHROPIC_API_KEY=sk-ant-...</pre>
-
-   **Windows (UI):**
-   Search "environment variables" in the Start menu → Edit environment variables for your account → New → Name: `ANTHROPIC_API_KEY`, Value: your key → restart Git Bash
-
-3. Run:
-```bash
-   claude
-```
-
-### Option B — Already have Claude Code running with a subscription
-You can use the hackathon API credits instead of your subscription.
-
-1. Claim your credits at **[appliedfutures.io/hackathons/explainable-brains](https://appliedfutures.io/hackathons/explainable-brains)**
-   *(use your Organization ID from console.anthropic.com)*
-
-2. Log out first to avoid conflicts between your subscription and the API key:
-```bash
-   claude /logout
-```
-
-3. Start Claude and authenticate with your Console account:
-```bash
-   claude
-```
-   Select **option 2 — Anthropic Console account** → follow the browser link → log in at console.anthropic.com
-
-**No browser access?** Set the API key manually instead of step 3:
-
-   **Mac:**
-   <pre>echo "export ANTHROPIC_API_KEY=sk-ant-..." >> ~/.zshrc && source ~/.zshrc</pre>
-   
-   **Linux:**
-   <pre>echo "export ANTHROPIC_API_KEY=sk-ant-..." >> ~/.bashrc && source ~/.bashrc</pre>
-   
-   **Windows — Git Bash:**
-   <pre>export ANTHROPIC_API_KEY=sk-ant-...</pre>
-   
-   **Windows — UI:**
-   Search "environment variables" in the Start menu → Edit environment variables for your account → New → add `ANTHROPIC_API_KEY` and your key value → restart your terminal
-
-   Then run `claude`, select **option 2** and say **Yes** to use the API key.
-
----
-
-## LightningAI Studio
-
-If you need more compute for Challenge A — more CPU, RAM, or GPU for custom model work.
-
-1. Go to [lightning.ai](https://lightning.ai) and create a free account
-2. Create a new Studio — Python template
-3. Clone the repo and install any missing packages into the existing environment:
-```bash
-git clone https://github.com/explainable-brains/explainable-brains-hackathon.git
-cd explainable-brains-hackathon
-```
-4. Set up Claude Code:
-- Add your Anthropic API key as a secret: go to lightning.ai → Settings → Secrets
-- Create a secret named ANTHROPIC_API_KEY with your key from console.anthropic.com
-- Restart the Studio so the secret is injected
-- Install Claude Code
-  
-```bash
-curl -fsSL https://claude.ai/install.sh | bash
-```
-
-- Start Claude Code via
-```bash
-ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY claude
-```
-or
-```bash
-ANTHROPIC_API_KEY=sk-ant-YOUR_KEY_HERE claude
+# Free deployment on Streamlit Community Cloud
+# 1. Push to GitHub
+# 2. Go to share.streamlit.io
+# 3. Point to app.py
+# Note: exclude data/ from git, upload separately or use st.file_uploader
 ```
